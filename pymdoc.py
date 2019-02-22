@@ -1,12 +1,10 @@
-"""Generate Markdown Documentation from Pyton Docstring
+"""Generate Markdown Documentation from Pyton Docstring"""
 
-Inspired by https://niklasrosenstein.github.io/pydoc-markdown/
-
-TODO: Add doc strings :)
-TODO: Check file exists
-TODO: Add -o --output-dir
-TODO: Add function filter (regex?)
-"""
+# Inspired by https://niklasrosenstein.github.io/pydoc-markdown/
+#
+# TODO: Check file exists
+# TODO: Add -o --output-dir
+# TODO: Add function filter (regex?)
 
 from __future__ import print_function
 import argparse
@@ -16,20 +14,32 @@ import logging
 
 class DocStringExtractor:
     """Extracts Doc String from functions for given python module"""
+
     def __init__(self, file=None):
-        """FIXME"""
+        """Init DocStringExtractor"""
         self.module = None
         self.functions = {}
         if file:
-            self.open(file)
-            self.extract()
+            self.run(file)
+
+    def run(self, file):
+        """Perform all actions:
+        - open python file as a module
+        - extract Docstrings for functions
+        - trim them
+        - save Docstrings in separate .md files
+        """
+        self.open(file)
+        self.extract()
+        self.trim()
+        self.save()
 
     def open(self, file):
-        """FIXME"""
+        """Open python file as a module"""
         self.module = imp.load_source("module", file)
 
     def extract(self):
-        """FIXME"""
+        """Extract Docstrings for functions"""
         for func in dir(self.module):
             if not func.startswith("__"):
                 logging.debug("Function: %s", func)
@@ -39,7 +49,7 @@ class DocStringExtractor:
                     self.functions[func] = getattr(self.module, func).__doc__
 
     def trim(self):
-        """FIXME"""
+        """Trim Docstrings"""
         for func in self.functions:
             # Get lines as a list
             lines = self.functions[func].splitlines()
@@ -57,10 +67,11 @@ class DocStringExtractor:
                 self.functions[func] = "\n".join(lines)
         logging.debug("Result:\n%s", self.functions)
 
-    def save(self):
-        """FIXME"""
+    def save(self, extension="md"):
+        """Save Docstrings in separate documentation files"""
         for func in self.functions:
-            md_file_name = func.replace("_", "-") + ".md"
+            # FIXME: use regex instead of replace?
+            md_file_name = func.replace("_", "-") + "." + extension
             logging.debug("Markdown file: %s", md_file_name)
             with open(md_file_name, "w") as md_file:
                 md_file.write(self.functions[func])
@@ -78,22 +89,24 @@ def parse_args():
 
 
 def main():
-    """Parse args, get module, go through module, extract doc strings"""
+    """Parse args then run DocStringExtractor"""
     args = parse_args()
 
     if args.verbose > 1:
-        logging.basicConfig(level=logging.DEBUG, format="DEBUG: %(message)s")
+        logging.basicConfig(level=logging.DEBUG,
+                            format="[%(levelname)s]: %(message)s")
 
     logging.debug("Args: %s", args)
     logging.debug("Input file: %s", args.file)
 
-    extractor = DocStringExtractor()
-    extractor.open(args.file)
-    extractor.extract()
-    extractor.trim()
-    extractor.save()
-    # logging.debug("Functions: %s", extractor.functions)
-    return True
+    try:
+        DocStringExtractor(args.file)
+        return True
+    except Exception as error:
+        color_red = "\033[91m"
+        color_reset = "\033[0m"
+        logging.exception("%s%s%s", color_red, error, color_reset)
+        return False
 
 
 if __name__ == "__main__":
