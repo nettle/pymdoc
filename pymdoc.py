@@ -1,6 +1,11 @@
-"""Generate markdown documentation from doc string
+"""Generate Markdown Documentation from Pyton Docstring
 
 Inspired by https://niklasrosenstein.github.io/pydoc-markdown/
+
+TODO: Add doc strings :)
+TODO: Check file exists
+TODO: Add -o --output-dir
+TODO: Add function filter (regex?)
 """
 
 from __future__ import print_function
@@ -61,20 +66,6 @@ class DocStringExtractor:
                 md_file.write(self.functions[func])
 
 
-def load_module_from_file(file, name="module"):
-    module = imp.load_source(name, file)
-    print("========================")
-    print(module.__doc__)
-    print("========================")
-
-    for func in dir(module):
-        if not func.startswith("__"):
-            print("Function:", func)
-            if hasattr(func, "__doc__"):
-                print("Documentation:")
-                print(getattr(module, func).__doc__)
-
-
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -96,7 +87,6 @@ def main():
     logging.debug("Args: %s", args)
     logging.debug("Input file: %s", args.file)
 
-    # load_module_from_file(args.file)
     extractor = DocStringExtractor()
     extractor.open(args.file)
     extractor.extract()

@@ -1,2 +1,4 @@
-# pymdoc
-Generate markdown documentation from doc string
+PyMDoc
+======
+
+Generate Markdown Documentation from Pyton Docstring
