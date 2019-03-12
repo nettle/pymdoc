@@ -31,12 +31,25 @@ class DocStringExtractor:
         """
         self.open(file)
         self.extract()
-        self.trim()
-        self.save()
+        # self.trim()
+        # self.save()
 
     def open(self, file):
         """Open python file as a module"""
-        self.module = imp.load_source("module", file)
+        # FIXME: shutil and tempfile
+        import shutil
+        import tempfile
+        temp = tempfile.NamedTemporaryFile()
+        logging.debug("temp.name = %s", temp.name)
+        # FIXME: insertion
+        temp.write("\ndef select(a):\n    return [a]\n")
+        with open(file) as source:
+            shutil.copyfileobj(source, temp)
+        temp.seek(0)
+        # logging.debug("%s", temp.read())
+        self.module = imp.load_source("module", temp.name)
+        logging.debug("self.module = %s", str(self.module))
+        temp.close()
 
     def extract(self):
         """Extract Docstrings for functions"""
@@ -77,6 +90,93 @@ class DocStringExtractor:
                 md_file.write(self.functions[func])
 
 
+class DocumentationExtractor:
+    """Extracts Doc String from functions for given python module"""
+
+    def __init__(self, file=None):
+        """Init instance"""
+        self.module = None
+        self.items = []
+        if file:
+            self.run(file)
+
+    def run(self, file):
+        """Perform all actions:
+        - open python file as an AST
+        - extract Docstrings for functions and assignments
+        - trim them
+        - save Docstrings in separate .md files
+        """
+        self.extract(file)
+        # self.trim()
+        # self.save()
+
+    def extract(self, file):
+        """Read python file and build an AST (Abstract Syntax Tree)
+        then extract docstrings for functions (FunctionDef)
+        and comments (Expr) which goes after assignments (Assign)"""
+        import ast  # FIXME
+        content = open(file).read()
+        tree = ast.parse(content)
+        # logging.debug("AST:\n%s", ast.dump(tree))
+
+        assignment = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                docstring = ast.get_docstring(node)
+                # logging.debug("AST Function: %s", node.name)
+                # logging.debug("AST Function: %s", docstring)
+                if docstring:
+                    self.items.append((node.name, docstring))
+                assignment = False
+            elif isinstance(node, ast.Assign):
+                # logging.debug("AST Assign: %s", ast.dump(node))
+                # logging.debug("AST Assign: %s", node.targets[0].id)
+                assignment = node.targets[0].id
+                # for target in node.targets:
+                #     logging.debug("AST Assign: %s", target.id)
+            elif isinstance(node, ast.Expr):
+                if assignment and node.value.s:
+                    # logging.debug("AST Assignment !!!!!!!!!!!!!!!: %s", assignment)
+                    self.items.append((assignment, node.value.s))
+                # logging.debug("AST Expr: %s", node.value.s)
+                assignment = False
+            else:
+                assignment = False
+
+        for item in self.items:
+            logging.debug("Name: %s", item[0])
+            logging.debug("Documentation:\n%s\n", item[1])
+
+    def trim(self):
+        """Trim Docstrings"""
+        for item in self.items:
+            # Get lines as a list
+            lines = item[1].splitlines()
+            # If there is more than 1 line and first line is empty
+            if len(lines) > 1 and not lines[0]:
+                # Remove first empty line
+                lines.pop(0)
+                # Get number of leading spaces
+                spaces = len(lines[0]) - len(lines[0].lstrip(" "))
+                # logging.debug("First line (%d): %s", spaces, lines[0])
+                # Trim lines
+                lines = [line[spaces:] for line in lines]
+                # logging.debug("Trimmed:\n%s", lines)
+                # Combine trimmed lines and put them back to dict
+                item[1] = "\n".join(lines)
+        logging.debug("Result:\n%s", self.items)
+
+    def save(self, extension="md"):
+        """Save Docstrings in separate documentation files"""
+        for item in self.items:
+            # FIXME: use regex instead of replace?
+            md_file_name = item[0].replace("_", "-") + "." + extension
+            logging.debug("Markdown file: %s", md_file_name)
+            with open(md_file_name, "w") as md_file:
+                md_file.write(item[1])
+
+
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -100,7 +200,8 @@ def main():
     logging.debug("Input file: %s", args.file)
 
     try:
-        DocStringExtractor(args.file)
+        # DocStringExtractor(args.file)
+        DocumentationExtractor(args.file)
         return True
     except Exception as error:
         color_red = "\033[91m"
