@@ -11,4 +11,4 @@ Read help:
 
 Very simple use-case:
 
-    python pymdoc.py -vvv example.py
+    python pymdoc.py example.py
