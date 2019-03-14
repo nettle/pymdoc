@@ -1,10 +1,5 @@
 """Generate Markdown Documentation from Python Docstring"""
 
-# Inspired by https://niklasrosenstein.github.io/pydoc-markdown/
-#
-# TODO: Check input file exists?
-# TODO: Add function filter (regex?)
-
 from __future__ import print_function
 import argparse
 import ast
@@ -12,12 +7,21 @@ import logging
 import os
 
 
-class DocumentationExtractor(object):
-    """Extracts Doc String from functions for given python file"""
+class Error(Exception):
+    """Known errors"""
+    pass
+
+
+class DocstringExtractor(object):
+    """
+    Extracts docstring from functions and after variables
+    for given python file
+    """
 
     def __init__(self, filename=None, output_file=None, output_path=None):
         """Init instance"""
         self.items = []
+        self.module_docstring = None
         if filename:
             self.run(filename, output_file, output_path)
 
@@ -40,12 +44,19 @@ class DocumentationExtractor(object):
         """Read python file and build an AST (Abstract Syntax Tree)
         then extract docstrings for functions (FunctionDef)
         and comments (Expr) which goes after assignments (Assign)"""
+        if not os.path.isfile(filename):
+            raise Error("File '{}' does not exists".format(filename))
         content = open(filename).read()
         tree = ast.parse(content)
-        # logging.debug("AST:\n%s", ast.dump(tree))
+        logging.debug("AST:\n%s\n\n", ast.dump(tree))
 
         assignment = False
+        first = False
         for node in ast.walk(tree):
+            logging.debug("AST: node=%s", node)
+            if isinstance(node, ast.Module):
+                first = True
+                continue
             if isinstance(node, ast.FunctionDef):
                 docstring = ast.get_docstring(node)
                 if docstring:
@@ -58,27 +69,45 @@ class DocumentationExtractor(object):
                     docstring = node.value.s
                 else:
                     docstring = None
+                if first and docstring:
+                    self.module_docstring = docstring
                 if assignment and docstring:
                     self.items.append((assignment, docstring))
                 assignment = False
             else:
                 assignment = False
+            first = False
 
     def print(self):
         """Print out result to console"""
-        for item in self.items:
+        def title(text):
+            """"Prints out title"""
             print(":" * 60)
-            print(":::", item[0])
+            print(":::", text)
             print(":" * 60)
-            print(item[1])
 
-    def save_to_path(self, output_path, extension="md"):
-        """Save Docstrings in separate documentation files"""
-        # FIXME: check if output_path exists
+        def content(text):
+            """"Prints out content"""
+            print(text)
+            print()
+
+        if self.module_docstring:
+            title("Module DocString")
+            content(self.module_docstring)
         for item in self.items:
-            # FIXME: use regex instead of replace?
-            md_file_name = item[0].replace("_", "-") + "." + extension
-            # FIXME: get absolute path?
+            title(item[0])
+            content(item[1])
+
+    def save_to_path(self, output_path, extension="md",
+                     name_replace={"_": "-"}):
+        """Save Docstrings in separate documentation files"""
+        if not os.path.isdir(output_path):
+            raise Error("Directory '{}' does not exists".format(output_path))
+        for item in self.items:
+            name = item[0]
+            for source in name_replace:
+                name = name.replace(source, name_replace[source])
+            md_file_name = name + "." + extension
             md_file_path = os.path.join(output_path, md_file_name)
             logging.debug("Markdown file: %s", md_file_path)
             with open(md_file_path, "w") as md_file:
@@ -86,10 +115,19 @@ class DocumentationExtractor(object):
 
     def save_to_file(self, output_file):
         """Save Docstrings in separate documentation files"""
-        with open(output_file, "w") as file_handler:
-            for item in self.items:
-                file_handler.write(item[1])
+        def write(file_handler, text):
+            """Writes text to file with ending linefeeds"""
+            lines = text.count('\n')
+            if lines > 0:
+                file_handler.write(text)
                 file_handler.write("\n")
+                if lines == 1:
+                    file_handler.write("\n")
+        with open(output_file, "w") as file_handler:
+            if self.module_docstring:
+                write(file_handler, self.module_docstring)
+            for item in self.items:
+                write(file_handler, item[1])
 
 
 def parse_args():
@@ -108,7 +146,7 @@ def parse_args():
 
 
 def main():
-    """Parse args then run DocStringExtractor"""
+    """Parse args then run DocstringExtractor"""
     args = parse_args()
 
     if args.verbose > 1:
@@ -125,9 +163,9 @@ def main():
     color_red = "\033[91m"
     color_reset = "\033[0m"
     try:
-        DocumentationExtractor(args.file, args.output_file, args.output_path)
+        DocstringExtractor(args.file, args.output_file, args.output_path)
         return True
-    except IOError as error:
+    except Error as error:
         logging.error("%s%s%s", color_red, error, color_reset)
     except Exception as error:  # pylint: disable=broad-except
         logging.exception("%s%s%s", color_red, error, color_reset)

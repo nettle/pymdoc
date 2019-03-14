@@ -1,4 +1,14 @@
-"""This is module Doc String"""
+"""
+This is module Doc String
+1
+2
+3
+"""
+
+
+def simple_func():
+    """Simple description"""
+    pass
 
 
 def example_func():
