@@ -6,10 +6,52 @@ import ast
 import logging
 import os
 
+import codegen   # SourceGenerator generates source code from AST
+
 
 class Error(Exception):
     """Known errors"""
     pass
+
+
+class SignaturGenerator(codegen.SourceGenerator):
+    """Overwrites SourceGenerator to produce Bazel-like function signature"""
+    def signature(self, node):
+        self.newline()
+        self.write(self.indent_with)
+        want_comma = []
+
+        def write_comma():
+            """Write comma after every argument if needed"""
+            if want_comma:
+                self.write(",")
+                self.newline()
+                self.write(self.indent_with)
+            else:
+                want_comma.append(True)
+
+        padding = [None] * (len(node.args) - len(node.defaults))
+        for arg, default in zip(node.args, padding + node.defaults):
+            write_comma()
+            self.visit(arg)
+            if default is not None:
+                self.write("=")
+                self.visit(default)
+        if node.vararg is not None:
+            write_comma()
+            self.write("*" + node.vararg)
+        if node.kwarg is not None:
+            write_comma()
+            self.write("**" + node.kwarg)
+
+    def visit_FunctionDef(self, node):
+        self.newline(extra=1)
+        self.decorators(node)
+        self.newline(node)
+        self.write("%s(" % node.name)
+        self.visit(node.args)
+        self.newline()
+        self.write(")")
 
 
 class DocstringExtractor(object):
@@ -60,7 +102,13 @@ class DocstringExtractor(object):
             if isinstance(node, ast.FunctionDef):
                 docstring = ast.get_docstring(node)
                 if docstring:
-                    self.items.append((node.name, docstring))
+                    generator = SignaturGenerator(" " * 4, False)
+                    generator.visit(node)
+                    code = "".join(generator.result)
+                    code = code.replace("'", '"')
+                    code = "```python\n" + code + "\n```"
+                    logging.debug("CODE:\n%s", code)
+                self.items.append((node.name, docstring, code))
                 assignment = False
             elif isinstance(node, ast.Assign):
                 assignment = node.targets[0].id
@@ -88,14 +136,17 @@ class DocstringExtractor(object):
 
         def content(text):
             """"Prints out content"""
-            print(text)
-            print()
+            if text:
+                print(text)
+                print()
 
         if self.module_docstring:
             title("Module DocString")
             content(self.module_docstring)
         for item in self.items:
             title(item[0])
+            if len(item) > 2:
+                content(item[2])
             content(item[1])
 
     def save_to_path(self, output_path, extension="md",
@@ -111,22 +162,27 @@ class DocstringExtractor(object):
             md_file_path = os.path.join(output_path, md_file_name)
             logging.debug("Markdown file: %s", md_file_path)
             with open(md_file_path, "w") as md_file:
+                if len(item) > 2:
+                    md_file.write(item[2])
+                    md_file.write("\n\n")
                 md_file.write(item[1])
 
     def save_to_file(self, output_file):
         """Save Docstrings in separate documentation files"""
         def write(file_handler, text):
             """Writes text to file with ending linefeeds"""
-            lines = text.count('\n')
-            if lines > 0:
+            if text:
                 file_handler.write(text)
-                file_handler.write("\n")
-                if lines == 1:
+                # file_handler.write("\n")
+                if not text.count("\n"):
                     file_handler.write("\n")
         with open(output_file, "w") as file_handler:
             if self.module_docstring:
                 write(file_handler, self.module_docstring)
             for item in self.items:
+                if len(item) > 2:
+                    write(file_handler, item[2])
+                    file_handler.write("\n\n")
                 write(file_handler, item[1])
 
 
